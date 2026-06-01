@@ -1,73 +1,34 @@
-# Sentiment Analysis Web Application
+# 🧠 AI-Based Sentiment Analysis & Statistics Dashboard
 
-A university graduation project for sentiment analysis using Python, FastAPI, and Transformers.
+An enterprise-level software engineering graduation project featuring a full-stack **FastAPI** backend integrated with a state-of-the-art **Transformer-based (DistilBERT)** NLP pipeline and a dynamic responsive **TailwindCSS / Chart.js** analytics dashboard.
 
-## Project Structure
+---
 
-```
-Sentiment_Analysis_Project/
-├── main.py              # FastAPI application entry point
-├── requirements.txt     # Python dependencies
-├── README.md           # Project documentation
-└── venv/               # Virtual environment (to be created)
-```
+## 🚀 Key Features
 
-## Setup Instructions
+* **Single Text Analytics:** Real-time sentiment prediction (Positive/Negative) with confidence scores.
+* **Bulk File Processing:** Supports massive datasets via CSV and Excel (`.xlsx`, `.xls`) file uploads.
+* **Smart Column Mapping:** Automatic text column detection supporting multi-language data inputs.
+* **Interactive Dashboard:** Beautiful distribution graphs, total evaluated metrics, and split high-fidelity KPI counters.
+* **Production-Ready Architecture:** Lightweight FastAPI server with fully configured asynchronous endpoints and CORS middleware.
 
-### 1. Create Virtual Environment
+---
 
+## 🛠️ Tech Stack & Architecture
+
+* **Backend Framework:** FastAPI (Python 3.9+)
+* **AI/NLP Model:** Hugging Face Transformers (`distilbert-base-uncased-finetuned-sst-2-english`)
+* **Data Processing:** Pandas, OpenPyXL
+* **Frontend Interface:** HTML5, TailwindCSS, FontAwesome 6, Chart.js (via Content Delivery Networks)
+* **Server Deployment:** Uvicorn (Asynchronous Server Gateway Interface)
+
+---
+
+## 📦 System Installation & Running Locally
+
+Follow these steps to deploy and test the system locally on your environment:
+
+### 1. Clone and Navigate to the Directory
 ```bash
-python3 -m venv venv
-```
-
-### 2. Activate Virtual Environment
-
-**On macOS/Linux:**
-```bash
-source venv/bin/activate
-```
-
-**On Windows:**
-```bash
-venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run the Application
-
-```bash
-python main.py
-```
-
-Or using uvicorn directly:
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `http://localhost:8000`
-
-### 5. Access API Documentation
-
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## Dependencies
-
-- **FastAPI**: Modern, fast web framework for building APIs
-- **Uvicorn**: ASGI server for running FastAPI
-- **Transformers**: Hugging Face library for NLP tasks
-- **PyTorch**: Deep learning framework
-- **Pydantic**: Data validation using Python type annotations
-
-## Next Steps
-
-- Implement sentiment analysis endpoint
-- Add model loading and prediction logic
-- Create frontend interface
-- Add authentication and rate limiting
-- Implement database integration for storing results
+git clone [https://github.com/lay2al/Sentiment-Analysis-Project.git](https://github.com/lay2al/Sentiment-Analysis-Project.git)
+cd Sentiment-Analysis-Project

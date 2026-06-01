@@ -1,34 +1,18 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import os
+import sqlite3
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from transformers import pipeline
-import logging
+from pydantic import BaseModel
 import pandas as pd
-import io
-from typing import List, Optional
+from transformers import pipeline
+from langdetect import detect, DetectorFactory
 
-app = FastAPI(
-    title="Sentiment Analysis API",
-    description="A FastAPI backend for sentiment analysis with single text and file upload",
-    version="2.0.0"
-)
+# لضمان استقرار نتائج كشف اللغة
+DetectorFactory.seed = 0
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Super AI Sentiment & Emotion Analytics System")
 
-# Initialize sentiment analysis pipeline
-try:
-    sentiment_pipeline = pipeline(
-        "sentiment-analysis",
-        model="distilbert-base-uncased-finetuned-sst-2-english"
-    )
-    logger.info("Sentiment analysis pipeline loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load sentiment pipeline: {str(e)}")
-    sentiment_pipeline = None
-
-# Allow CORS for frontend integration
+# تفعيل الـ CORS لتتصل الواجهة بالسيرفر بأمان
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,109 +21,151 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- 1. إعداد قاعدة البيانات (SQLite History) ---
+DB_PATH = "project_history.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT,
+            language TEXT,
+            sentiment TEXT,
+            intensity_score REAL,
+            dominant_emotion TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- 2. تحميل نماذج الذكاء الاصطناعي (AI Pipelines) ---
+print("🔄 Loading Advanced NLP Pipelines...")
+# موديل المشاعر الأساسي (الإنجليزي والسريع)
+sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+# موديل العواطف المتعددة (تحليل الأبعاد العاطفية الـ 4 الأساسية)
+emotion_pipeline = pipeline("text-classification", model="bhadresh-savani/bert-base-uncased-emotion", top_k=None)
+print("✅ All AI Pipelines Loaded Successfully!")
+
+# --- 3. نماذج البيانات (Pydantic Models) ---
 class TextInput(BaseModel):
-    text: str = Field(..., example="I love this product!")
+    text: str
+
+# --- 4. دالة معالجة النصوص الذكية حسابياً ---
+def process_text_ai(text: str):
+    # أ) كشف اللغة تلقائياً
+    try:
+        lang = detect(text)
+        lang_label = "Arabic" if lang == 'ar' else "English"
+    except:
+        lang_label = "English"  # افتراضي في حال فشل الكشف
+    
+    # ب) تحليل المشاعر الأساسي وحساب معادلة المشرف (-5 إلى 5)
+    sentiment_res = sentiment_pipeline(text)[0]
+    label = sentiment_res['label']  # POSITIVE or NEGATIVE
+    confidence = sentiment_res['score']
+    
+    # تطبيق معادلة المشرف الحسابية الدقيقة
+    if label == "POSITIVE":
+        # تحويل من (0.5 لـ 1) إلى مقياس (0 لـ 5)
+        intensity_score = round((confidence - 0.5) * 2 * 5, 2)
+        # ضمان عدم تجاوز الحدود برمجياً
+        intensity_score = min(5.0, max(0.0, intensity_score))
+        final_label = "Positive"
+    else:
+        # تحويل من (0.5 لـ 1) إلى مقياس (-5 لـ 0)
+        intensity_score = round((confidence - 0.5) * -2 * 5, 2)
+        intensity_score = max(-5.0, min(0.0, intensity_score))
+        final_label = "Negative"
+        
+    # ج) تحليل العواطف المتعددة (Emotion Prototyping)
+    emotion_res = emotion_pipeline(text)[0]
+    # مخرجات الموديل بتعطي نسب لكل العواطف، بنقشط العواطف الـ 4 الأساسية اللي بدناياها
+    allowed_emotions = ['joy', 'sadness', 'anger', 'fear']
+    filtered_emotions = {e['label']: e['score'] for e in emotion_res if e['label'] in allowed_emotions}
+    
+    # تحديد العاطفة المسيطرة
+    dominant_emotion = max(filtered_emotions, key=filtered_emotions.get).capitalize()
+    
+    # د) حفظ النتيجة في قاعدة البيانات كـ History للمشرف
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO history (text, language, sentiment, intensity_score, dominant_emotion)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (text, lang_label, final_label, intensity_score, dominant_emotion))
+    conn.commit()
+    conn.close()
+    
+    return {
+        "text": text,
+        "language": lang_label,
+        "sentiment": final_label,
+        "intensity_score": intensity_score,
+        "dominant_emotion": dominant_emotion,
+        "emotions_breakdown": {k.capitalize(): round(v * 100, 2) for k, v in filtered_emotions.items()}
+    }
+
+# --- 5. الـ Endpoints الأساسية والمحدثة ---
 
 @app.post("/analyze")
-async def analyze_sentiment(data: TextInput):
-    if sentiment_pipeline is None:
-        raise HTTPException(status_code=503, detail="Sentiment analysis model is not available")
-    
-    try:
-        # الفحص هنا: الموديل بيرجع قائمة [dict]
-        result = sentiment_pipeline(data.text)
-        
-        # الإصلاح السحري: نأخذ العنصر صفر
-        label = result[0]['label']
-        score = result[0]['score']
-        
-        logger.info(f"Analyzed single text: '{data.text[:30]}...' - Label: {label}, Score: {score}")
-        
-        return {
-            "label": label,
-            "score": score
-        }
-    except Exception as e:
-        logger.error(f"Error during single sentiment analysis: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+async def analyze_single_text(input_data: TextInput):
+    if not input_data.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+    return process_text_ai(input_data.text)
 
 @app.post("/analyze-file")
-async def analyze_file(file: UploadFile = File(...)):
-    if sentiment_pipeline is None:
-        raise HTTPException(status_code=503, detail="Sentiment analysis model is not available")
-        
+async def analyze_bulk_file(file: UploadFile = File(...)):
+    # دعم صيغ الـ Excel والـ CSV بالكامل
+    ext = os.path.splitext(file.filename)[1].lower()
     try:
-        content = await file.read()
-        file_extension = file.filename.split('.')[-1].lower()
-        
-        if file_extension == 'csv':
-            df = pd.read_csv(io.BytesIO(content))
-        elif file_extension in ['xlsx', 'xls']:
-            df = pd.read_excel(io.BytesIO(content))
+        if ext == ".csv":
+            df = pd.read_csv(file.file)
+        elif ext in [".xlsx", ".xls"]:
+            df = pd.read_excel(file.file)
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload CSV or Excel.")
-            
-        # Find a text column
-        text_column = None
-        possible_names = ['text', 'review', 'comment', 'body', 'sentence', 'المحتوى', 'النص']
-        
-        for col in df.columns:
-            if col.lower() in possible_names:
-                text_column = col
-                break
-                
-        if text_column is None:
-            text_column = df.select_dtypes(include=['object']).columns[0]
-            
-        texts = df[text_column].dropna().astype(str).tolist()
-        
-        if not texts:
-            raise HTTPException(status_code=400, detail="No valid text found in the file")
-            
-        results = []
-        positive_count = 0
-        negative_count = 0
-        total_confidence = 0.0
-        positive_confidence = 0.0
-        negative_confidence = 0.0
-        
-        # Process in bulk
-        pipeline_results = sentiment_pipeline(texts)
-        
-        for text, res in zip(texts, pipeline_results):
-            label = res['label']
-            score = res['score']
-            
-            total_confidence += score
-            if label == 'POSITIVE':
-                positive_count += 1
-                positive_confidence += score
-            else:
-                negative_count += 1
-                negative_confidence += score
-                
-            results.append({
-                "text": text[:100] + "..." if len(text) > 100 else text,
-                "label": label,
-                "score": round(score, 4)
-            })
-            
-        total_records = len(texts)
-        
-        return {
-            "total_records": total_records,
-            "positive_count": positive_count,
-            "negative_count": negative_count,
-            "average_confidence": round(total_confidence / total_records, 4) if total_records else 0,
-            "positive_average_confidence": round(positive_confidence / positive_count, 4) if positive_count else 0,
-            "negative_average_confidence": round(negative_confidence / negative_count, 4) if negative_count else 0,
-            "preview_data": results[:100]  # Return first 100 records for preview table
-        }
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        logger.error(f"Error during file analysis: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
+
+    # البحث الذكي عن عمود النصوص (Smart Column Mapping)
+    text_col = None
+    possible_cols = ['text', 'content', 'tweet', 'review', 'النص', 'المحتوى', 'comment']
+    for c in df.columns:
+        if str(c).lower().strip() in possible_cols:
+            text_col = c
+            break
+    if text_col is None:
+        # إذا ما لقى الاسم، بياخد أول عمود نصوص تلقائياً
+        text_col = df.select_dtypes(include=['object']).columns[0]
+
+    results = []
+    for index, row in df.iterrows():
+        text_val = str(row[text_col])
+        if text_val.strip() and text_val != "nan":
+            res = process_text_ai(text_val)
+            results.append(res)
+
+    return {
+        "filename": file.filename,
+        "total_records": len(results),
+        "data": results
+    }
+
+@app.get("/history")
+async def get_history():
+    # سحب سجل السيرفر بالكامل لعرضه بجدول متقدم
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM history ORDER BY timestamp DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 if __name__ == "__main__":
     import uvicorn
